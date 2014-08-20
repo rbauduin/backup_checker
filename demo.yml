@@ -1,0 +1,12 @@
+backups:
+- desc: My first backup
+  location: /tmp/backup_<%= time.strftime('%Y-%m-%d') %>.tgz
+  name: first backup
+  validators:
+  - kind: file
+- desc: My secondbackup
+  location: /tmp/backup2.tgz
+  name: secondbackup
+  validators:
+  - kind: file
+    minsize: 4Kb
