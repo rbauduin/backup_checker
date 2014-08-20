@@ -3,6 +3,7 @@
 from Cheetah.Template import Template
 import os.path
 import humanfriendly
+import subprocess
 import yaml
 
 # The hierarchy of objects is:
@@ -26,18 +27,29 @@ class Test:
   def __init__(self, k , v):
     self.key = k
     self.value = v
+    # set default messages
+    self.success_message = "Test of "+ self.key + " " + self.value+" dit pass."
+    self.error_message =   "Test of "+ self.key + " " + self.value+" dit NOT pass"
     self.prepare()
   def prepare(self):
   # Used in derived classes to setup the instance more
   # precisely
     pass
   def check(self,b):
-    pass
+    self.run_test(b)
+    if self.result:
+      message=self.success_message
+    else:
+      message=self.error_message
+    b.log_message(self.result, message)
+    return self.result
 
 # Preliminary tests for a local file backup.
 class FileTest(Test):
-  def check(self,b):
-    return os.path.isfile(b.location)
+  def run_test(self,b):
+    self.success_message = "File "+b.location+" exists!"
+    self.error_message =   "File "+b.location+" not found!"
+    self.result =  os.path.isfile(b.location)
 
 # Check size of backup is above the minimum value as
 # specified in the yaml.
@@ -50,15 +62,48 @@ class FileMinsizeTest(Test):
       self.minsize=humanfriendly.parse_size(self.value)
     else:
       self.minsize=self.value
+
     
-  def check(self,b):
+  def run_test(self,b):
     self.size=os.path.getsize(b.location)
-    if self.size>=self.minsize:
-      b.log_message(True, "Minimum size respected ( "+ str(self.size) +" !< " + str(self.minsize) +" ).")
-      return True
+    # setup messages
+    self.success_message = "Minimum size respected ( "+ str(self.size) +" !< " + str(self.minsize) +" )."
+    self.error_message = "Minimum size not respected ( "+ str(self.size) +" < " + str(self.minsize) +" )."
+    
+    # perform test
+    self.result = self.size>=self.minsize
+
+class FileFiletypeTest(Test):
+  def run_test(self,b):
+    # get result
+    output=subprocess.check_output("file --mime-type "+b.location, shell=True)
+    path,filetype = map(str.rstrip,map(str.lstrip,output.split(":")))
+    # set messages
+    self.success_message = "File type correct ( "+ filetype +" == " + self.value +" )."
+    self.error_message =   "File type INCORRECT ( "+ filetype +" != " + self.value +" )."
+    # set result
+    self.result = filetype == self.value
+
+
+import glob
+class FileglobTest(Test):
+  def run_test(self,b):
+    found = glob.glob(b.location)
+    l = len(found)
+    if l==0:
+      self.error_message =   "File matching"+b.location+" not found!"
+      self.result=False
+    elif l>1:
+      self.error_message =   "Multiple files matching"+b.location+" found!"
+      self.result=False
     else:
-      b.log_message(False, "Minimum size not respected ( "+ str(self.size) +" < " + str(self.minsize) +" ).")
-      return False
+      self.success_message =   "File matching"+b.location+" found!"
+      self.result=True
+      # set file location in backup
+      b.location=found[0]
+
+FileglobMinsizeTest = FileMinsizeTest
+FileglobFiletypeTest= FileFiletypeTest
 
 
 ################################################################################
@@ -106,10 +151,8 @@ class Backup:
   def initialize_validator(self,v):
     return Validator(v)
   def set_valid(self):
-    print "validation"
     self.status='valid'
   def set_invalid(self):
-    print "invalidation"
     self.status='invalid'
   def done(self):
     self.status!="unchecked"
@@ -125,12 +168,17 @@ class Backup:
       s+=m+"\n"
     return s
 
+# TODO NEXT : move the kind attribute to the back level from the validator level
+# rename location to path in the yaml, and let the location be set in the backup 
+# object to the real location of the file
+# Maybe (?) add handle to the file in the backup instance?
+# that would be handle to local file or to the s3 key of the backup file
 
 class BackupChecker:
   def __init__(self,config_file):
     # Read config and initialise backup instances
     self.config = yaml.load(Template(file=config_file).__str__())
-    self.backups= (Backup(b) for b in self.config['backups'])
+    self.backups= [Backup(b) for b in self.config['backups']]
 
   def check_backup(self,b):
     # Check one backup
@@ -157,12 +205,16 @@ class BackupChecker:
 
   def check(self):
     for i,backup in enumerate(self.backups):
-      print i
-      print backup.name
-      print backup.status
       self.check_backup(backup)
-      print backup
 
+  def __str__(self):
+    s = "BackupChecker results\n"
+    s+= "---------------------\n"
+    for b in self.backups:
+      s+=str(b)
+      s+="\n"
+    return s
 
 bc=BackupChecker("demo.yml")
 bc.check()
+print bc

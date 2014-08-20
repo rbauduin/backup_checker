@@ -5,8 +5,24 @@ backups:
   validators:
   - kind: file
 - desc: My secondbackup
-  location: /tmp/backup2.tgz
+  location: /tmp/test.tgz
   name: secondbackup
   validators:
   - kind: file
-    minsize: 4Kb
+    minsize: 1Kb
+    filetype: application/x-gzip
+- desc: backup file glob
+  location: /tmp/tes*.tgz
+  name: thirdbackup
+  validators:
+  - kind: fileglob
+    minsize: 1Kb
+    filetype: application/x-gzip
+- desc: s3 backup
+  s3_auth: s3_auth_demo.yml
+  location: /bucket/file.tgz
+  name: s3backup
+  validators:
+  - kind: fileglob
+    minsize: 1Kb
+    filetype: application/x-gzip
