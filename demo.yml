@@ -1,28 +1,29 @@
 backups:
 - desc: My first backup
+  kind: file
   location: /tmp/backup_<%= time.strftime('%Y-%m-%d') %>.tgz
   name: first backup
-  validators:
-  - kind: file
+  tests:
 - desc: My secondbackup
+  kind: file
   location: /tmp/test.tgz
   name: secondbackup
-  validators:
-  - kind: file
+  tests:
     minsize: 1Kb
     filetype: application/x-gzip
 - desc: backup file glob
   location: /tmp/tes*.tgz
   name: thirdbackup
   validators:
-  - kind: fileglob
+  kind: fileglob
+  tests:
     minsize: 1Kb
     filetype: application/x-gzip
 - desc: s3 backup
   s3_auth: s3_auth_demo.yml
   location: /bucket/file.tgz
   name: s3backup
-  validators:
-  - kind: fileglob
+  kind: fileglob
+  tests:
     minsize: 1Kb
     filetype: application/x-gzip

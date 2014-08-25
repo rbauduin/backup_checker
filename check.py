@@ -24,12 +24,11 @@ import yaml
 # The test are done in the check method, which takes
 # the backup to test as argument.
 class Test:
-  def __init__(self, k , v):
-    self.key = k
-    self.value = v
+  def __init__(self, params={}):
+    self.params = params
     # set default messages
-    self.success_message = "Test of "+ self.key + " " + self.value+" dit pass."
-    self.error_message =   "Test of "+ self.key + " " + self.value+" dit NOT pass"
+    self.success_message = "Test did pass. "+self.__class__.__name__
+    self.error_message =   "Test did NOT pass. "+self.__class__.__name__
     self.prepare()
   def prepare(self):
   # Used in derived classes to setup the instance more
@@ -38,8 +37,10 @@ class Test:
   def check(self,b):
     self.run_test(b)
     if self.result:
+      print self.success_message
       message=self.success_message
     else:
+      print self.error_message
       message=self.error_message
     b.log_message(self.result, message)
     return self.result
@@ -58,10 +59,10 @@ class FileTest(Test):
 class FileMinsizeTest(Test):
   def prepare(self):
     # parse file sizes with humanfriendly
-    if self.value.__class__.__name__=="str":
-      self.minsize=humanfriendly.parse_size(self.value)
+    if self.params.__class__.__name__=="str":
+      self.minsize=humanfriendly.parse_size(self.params)
     else:
-      self.minsize=self.value
+      self.minsize=self.params
 
     
   def run_test(self,b):
@@ -89,6 +90,8 @@ import glob
 class FileglobTest(Test):
   def run_test(self,b):
     found = glob.glob(b.location)
+    print "__________________________"
+    print found
     l = len(found)
     if l==0:
       self.error_message =   "File matching"+b.location+" not found!"
@@ -107,49 +110,30 @@ FileglobFiletypeTest= FileFiletypeTest
 
 
 ################################################################################
-# A validator groups tests.
-# 
-class Validator:
-  def __init__(self,yml):
-    self.kind=yml['kind']
-    # remove kind from dictionary so we can use all other keys as tests
-    # kind is used to run preliminary tests of the validator. Eg for a file
-    # validator, the presence of the file is first checked.
-    del yml["kind"]
-    self.yml=yml
-    self.tests = [self.initialize_test(k,v) for k,v in self.yml.iteritems()]
-
-  def initialize_test(self,k,v):
-    # initialize instance of correct test class
-    name = self.kind.title()+k.title().replace("_","") + "Test"
-    klass = globals()[name]
-    return klass(k,v)
-
-  def check(self,b):
-    # First run basic validation for this kinf od validation
-    # if successful, try all other tests.
-    name = self.kind.title().replace("_","") + "Test"
-    klass = globals()[name]
-    basic_test = klass("kind","file")
-    if basic_test.check(b):
-      return  all( t.check(b) for t in self.tests)
-    else:
-      return False
-
-
-################################################################################
 # Backups hold specs about the storage of the backup to be validated,
 # and other data like name and description.
 # It initialises the validators defined for it in the yaml file
 class Backup:
   def __init__(self, yml):
+    # path is value configure in yaml file
+    # location is value as discovered by backup checker. At start, same value
     self.location = yml['location']
+    self.path = self.location
     self.name     = yml["name"]
-    self.validators = [self.initialize_validator(v) for v in yml["validators"]]
+    self.kind     = yml["kind"]
+    if yml["tests"]: # and  yml["validators"]
+      self.tests = [self.initialize_test(k,v) for k,v in yml["tests"].iteritems()]
+    else:
+      self.tests = []
     self.messages = []
     self.status = 'unchecked'
-  def initialize_validator(self,v):
-    return Validator(v)
+  def initialize_test(self,k,v):
+    name = self.kind.title().replace("_","") + k.title().replace("_","")+"Test"
+    print name
+    print k
+    print v
+    klass = globals()[name]
+    return klass(v)
   def set_valid(self):
     self.status='valid'
   def set_invalid(self):
@@ -163,14 +147,11 @@ class Backup:
     
 
   def __str__(self):
-    s= "Backup " + self.name + " : " + self.status +"\n"
+    s= "Backup " + self.name + "( " + self.location + ") : " + self.status +"\n"
     for success,m in self.messages:
       s+=m+"\n"
     return s
 
-# TODO NEXT : move the kind attribute to the back level from the validator level
-# rename location to path in the yaml, and let the location be set in the backup 
-# object to the real location of the file
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
 
@@ -183,26 +164,35 @@ class BackupChecker:
   def check_backup(self,b):
     # Check one backup
 
-    # INIT
-    # i is index, l length of validators list
-    i=0
-    l=len(b.validators)
-    
-    # INV : 
-    #  0<=i<l
-    #  for 0<=j<i,   b.validators[j] was tested
-    while i<l and not b.is_invalid():
-      v=b.validators[i]
-      # if the check fails; we set the backup as invalid
-      # and loop will stop
-      if not v.check(b):
+    # Check backup kind base test
+    name = b.kind.title().replace("_","") + "Test"
+    print name
+    klass = globals()[name]
+    basic_test = klass()
+    if basic_test.check(b):
+      # INIT
+      # i is index, l length of validators list
+      i=0
+      l=len(b.tests)
+      
+      # INV : 
+      #  0<=i<l
+      #  for 0<=j<i,   b.validators[j] was tested
+      while i<l and not b.is_invalid():
+        t=b.tests[i]
+        # if the check fails; we set the backup as invalid
+        # and loop will stop
+        if not t.check(b):
+          b.set_invalid()
+        i=i+1
+      # if we went through the whole list without invalidating it, the 
+      # backup can be validated
+      if i==l and not b.is_invalid():
+        b.set_valid()
+    else:
         b.set_invalid()
-      i=i+1
-    # if we went through the whole list without invalidating it, the 
-    # backup can be validated
-    if i==l and not b.is_invalid():
-      b.set_valid()
 
+    
   def check(self):
     for i,backup in enumerate(self.backups):
       self.check_backup(backup)
