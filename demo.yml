@@ -4,13 +4,14 @@ backups:
   location: /tmp/backup_<%= time.strftime('%Y-%m-%d') %>.tgz
   name: first backup
   tests:
+    minsize: 1Kb
 - desc: My secondbackup
   kind: file
   location: /tmp/test.tgz
   name: secondbackup
   tests:
     minsize: 1Kb
-    filetype: application/x-gzip
+    filetype: application/gzip
 - desc: backup file glob
   location: /tmp/tes*.tgz
   name: thirdbackup
@@ -18,12 +19,18 @@ backups:
   kind: fileglob
   tests:
     minsize: 1Kb
-    filetype: application/x-gzip
+    filetype: application/gzip
 - desc: s3 backup
   s3_auth: s3_auth_demo.yml
-  location: /bucket/file.tgz
+  location: destockjeans-db-backup/destockjeans-db.production.mainappserver.20140825030015.sql.gz.enc
   name: s3backup
-  kind: fileglob
+  kind: s3_file
   tests:
     minsize: 1Kb
-    filetype: application/x-gzip
+- desc: s3 backup
+  s3_auth: s3_auth_demo.yml
+  location: destockjeans-db-backup/destockjeans-db.production.mainappserver.<%= time.strftime('%Y%m%d') %>*.sql.gz.enc
+  name: s3backup
+  kind: s3_fileglob
+  tests:
+    minsize: 1Kb

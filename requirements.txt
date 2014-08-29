@@ -1,3 +1,4 @@
 pyaml
 cheetah
-humandfriendly
+humanfriendly
+boto

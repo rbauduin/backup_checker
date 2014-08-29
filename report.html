@@ -1,0 +1,23 @@
+<html>
+<head>
+<title>BackupChecker Report</title>
+<style>
+tr.valid {background-color: #90EE90;}
+</style>
+</head>
+<body>
+<table>
+  <tr>
+    <th>Backup</th>
+    <th>Status</th>
+  </tr>
+#for $backup in $bc.backups
+  <tr class="$backup.status">
+    <td>$backup.location</td>
+    <td>$backup.status</td>
+  </tr>
+#end for
+</table>
+</body>
+</html>
+

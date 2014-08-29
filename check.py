@@ -31,32 +31,25 @@ class Test:
     self.error_message =   "Test did NOT pass. "+self.__class__.__name__
     self.prepare()
   def prepare(self):
-  # Used in derived classes to setup the instance more
+    # Used in derived classes to setup the instance more
   # precisely
     pass
   def check(self,b):
     self.run_test(b)
     if self.result:
-      print self.success_message
+      print(self.success_message)
       message=self.success_message
     else:
-      print self.error_message
+      print(self.error_message)
       message=self.error_message
     b.log_message(self.result, message)
     return self.result
-
-# Preliminary tests for a local file backup.
-class FileTest(Test):
-  def run_test(self,b):
-    self.success_message = "File "+b.location+" exists!"
-    self.error_message =   "File "+b.location+" not found!"
-    self.result =  os.path.isfile(b.location)
 
 # Check size of backup is above the minimum value as
 # specified in the yaml.
 # minsize can be specified in bytes or with the unit suffix
 # eg : 5Kb
-class FileMinsizeTest(Test):
+class MinsizeTest(Test):
   def prepare(self):
     # parse file sizes with humanfriendly
     if self.params.__class__.__name__=="str":
@@ -64,49 +57,31 @@ class FileMinsizeTest(Test):
     else:
       self.minsize=self.params
 
-    
+
   def run_test(self,b):
-    self.size=os.path.getsize(b.location)
     # setup messages
-    self.success_message = "Minimum size respected ( "+ str(self.size) +" !< " + str(self.minsize) +" )."
-    self.error_message = "Minimum size not respected ( "+ str(self.size) +" < " + str(self.minsize) +" )."
-    
+    self.success_message = "Minimum size respected ( "+ str(b.specs.get("size")) +" !< " + str(self.minsize) +" )."
+    self.error_message = "Minimum size not respected ( "+ str(b.specs.get("size")) +" < " + str(self.minsize) +" )."
+
     # perform test
-    self.result = self.size>=self.minsize
+    self.result = b.specs.get("size")>=self.minsize
 
-class FileFiletypeTest(Test):
+class FiletypeTest(Test):
   def run_test(self,b):
-    # get result
-    output=subprocess.check_output("file --mime-type "+b.location, shell=True)
-    path,filetype = map(str.rstrip,map(str.lstrip,output.split(":")))
     # set messages
-    self.success_message = "File type correct ( "+ filetype +" == " + self.value +" )."
-    self.error_message =   "File type INCORRECT ( "+ filetype +" != " + self.value +" )."
+    self.success_message = "File type correct ( "+ b.specs.get("mimetype") +" == " + self.params +" )."
+    self.error_message =   "File type INCORRECT ( "+ b.specs.get("mimetype") +" != " + self.params +" )."
     # set result
-    self.result = filetype == self.value
+    self.result = b.specs.get("mimetype") == self.params
 
 
-import glob
-class FileglobTest(Test):
-  def run_test(self,b):
-    found = glob.glob(b.location)
-    print "__________________________"
-    print found
-    l = len(found)
-    if l==0:
-      self.error_message =   "File matching"+b.location+" not found!"
-      self.result=False
-    elif l>1:
-      self.error_message =   "Multiple files matching"+b.location+" found!"
-      self.result=False
-    else:
-      self.success_message =   "File matching"+b.location+" found!"
-      self.result=True
-      # set file location in backup
-      b.location=found[0]
-
-FileglobMinsizeTest = FileMinsizeTest
-FileglobFiletypeTest= FileFiletypeTest
+class BackupSpecs:
+  def __init__(self):
+    self.specs={}
+  def set(self,k,v):
+    self.specs[k]=v
+  def get(self,k):
+    return self.specs[k]
 
 
 ################################################################################
@@ -121,17 +96,24 @@ class Backup:
     self.path = self.location
     self.name     = yml["name"]
     self.kind     = yml["kind"]
+    self.specs    = BackupSpecs()
     if yml["tests"]: # and  yml["validators"]
       self.tests = [self.initialize_test(k,v) for k,v in yml["tests"].iteritems()]
     else:
       self.tests = []
     self.messages = []
-    self.status = 'unchecked'
+    # collect specs only if backup exists
+    if self.exists():
+      self.status = 'unchecked'
+      self.collect_specs()
+    else:
+      self.set_invalid()
+  def exists(self):
+    return os.path.isfile(self.location)
+  def collect_specs(self):
+    pass
   def initialize_test(self,k,v):
-    name = self.kind.title().replace("_","") + k.title().replace("_","")+"Test"
-    print name
-    print k
-    print v
+    name = k.title().replace("_","")+"Test"
     klass = globals()[name]
     return klass(v)
   def set_valid(self):
@@ -144,13 +126,92 @@ class Backup:
     return self.status=='invalid'
   def log_message(self,success, message):
     self.messages.append( (success, message) )
-    
+
 
   def __str__(self):
     s= "Backup " + self.name + "( " + self.location + ") : " + self.status +"\n"
     for success,m in self.messages:
       s+=m+"\n"
     return s
+
+class FileBackup(Backup):
+  def collect_specs(self):
+    self.specs.set("size",os.path.getsize(self.location))
+
+    output=subprocess.check_output("file --mime-type "+self.location, shell=True)
+    path,mimetype = map(str.rstrip,map(str.lstrip,output.split(":")))
+    self.specs.set("mimetype",mimetype)
+
+import glob
+class FileglobBackup(FileBackup):
+  def exists(self):
+    found = glob.glob(self.location)
+    l = len(found)
+    if l==0:
+      return False
+    elif l>1:
+      return False
+    else:
+      self.location =  found[0]
+      return True
+
+import boto
+class S3FileBackup(Backup):
+  def __init__(self,yml):
+    # needed to break cyclic dependency
+    self.location = yml["location"]
+    self.init_s3_connection(yml)
+    self.init_s3_object()
+    Backup.__init__(self,yml)
+  def init_s3_connection(self,yml):
+    s3_auth = yaml.load(open(yml["s3_auth"]).read().__str__())
+    self.conn = boto.connect_s3(
+        aws_access_key_id= s3_auth["access_key"],
+        aws_secret_access_key = s3_auth["secret_key"])
+  def init_s3_object(self):
+    bucket_name,object_name=self.location.split('/')
+    bucket=self.conn.get_bucket(bucket_name)
+    self.s3_object=bucket.get_key(object_name)
+  def exists(self):
+    return self.s3_object != None and self.s3_object.exists()
+  def collect_specs(self):
+    self.specs.set("size",self.s3_object.size)
+    self.specs.set("mimetype",self.s3_object.content_type)
+    #k.size
+    #k.last_modified
+    #import time
+    #time.strptime(k.last_modified, '%a, %d %b %Y %H:%M:%S %Z')
+    #k.name
+    #k.content_type
+
+import fnmatch
+class S3FileglobBackup(S3FileBackup):
+  def init_s3_object(self):
+    bucket_name,object_name=self.location.split('/')
+    print(bucket_name)
+    print(object_name)
+    bucket=self.conn.get_bucket(bucket_name)
+    print(bucket)
+
+    objects = bucket.list()
+
+    count = 0
+    last = ""
+    for key in objects:
+      print(key.name)
+      print(self.location)
+      print fnmatch.fnmatch(key.name,self.location)
+      if fnmatch.fnmatch(key.name,object_name):
+        count = count + 1
+        last = key
+    if count==1:
+      self.s3_object=last
+      self.location=bucket_name+"/"+last.name
+      return True
+    else:
+      self.s3_object = None
+      return False                   
+
 
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
@@ -159,38 +220,35 @@ class BackupChecker:
   def __init__(self,config_file):
     # Read config and initialise backup instances
     self.config = yaml.load(Template(file=config_file).__str__())
-    self.backups= [Backup(b) for b in self.config['backups']]
+    print(self.config)
+    self.backups= [self.init_backup(b) for b in self.config['backups']]
+  def init_backup(self,yml):
+    name = yml["kind"].title().replace("_","")+"Backup"
+    klass = globals()[name]
+    return klass(yml)
 
   def check_backup(self,b):
     # Check one backup
 
-    # Check backup kind base test
-    name = b.kind.title().replace("_","") + "Test"
-    print name
-    klass = globals()[name]
-    basic_test = klass()
-    if basic_test.check(b):
-      # INIT
-      # i is index, l length of validators list
-      i=0
-      l=len(b.tests)
-      
-      # INV : 
-      #  0<=i<l
-      #  for 0<=j<i,   b.validators[j] was tested
-      while i<l and not b.is_invalid():
-        t=b.tests[i]
-        # if the check fails; we set the backup as invalid
-        # and loop will stop
-        if not t.check(b):
-          b.set_invalid()
-        i=i+1
-      # if we went through the whole list without invalidating it, the 
-      # backup can be validated
-      if i==l and not b.is_invalid():
-        b.set_valid()
-    else:
+    # INIT
+    # i is index, l length of validators list
+    i=0
+    l=len(b.tests)
+    
+    # INV : 
+    #  0<=i<l
+    #  for 0<=j<i,   b.validators[j] was tested
+    while i<l and not b.is_invalid():
+      t=b.tests[i]
+      # if the check fails; we set the backup as invalid
+      # and loop will stop
+      if not t.check(b):
         b.set_invalid()
+      i=i+1
+    # if we went through the whole list without invalidating it, the 
+    # backup can be validated
+    if i==l and not b.is_invalid():
+      b.set_valid()
 
     
   def check(self):
@@ -204,7 +262,10 @@ class BackupChecker:
       s+=str(b)
       s+="\n"
     return s
+  def to_html(self):
+      return Template(file="report.html", searchList=[{"bc":self}]).__str__()
 
 bc=BackupChecker("demo.yml")
 bc.check()
-print bc
+print(bc)
+print(bc.to_html())
