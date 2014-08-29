@@ -84,13 +84,13 @@ class CountTest(Test):
     # set result
     self.result = b.specs.get("count") == self.params
 
-class MinFileCountTest(Test):
+class MinEntriesCountTest(Test):
   def run_test(self,b):
     # set messages
-    self.success_message = "Number of file correct ( "+ str(b.specs.get("files_count")) +" >= " + str(self.params) +" )."
-    self.error_message =   "Number of file INCORRECT ( "+ str(b.specs.get("files_count")) +" <= " + str(self.params) +" )."
+    self.success_message = "Number of file correct ( "+ str(b.specs.get("entries_count")) +" >= " + str(self.params) +" )."
+    self.error_message =   "Number of file INCORRECT ( "+ str(b.specs.get("entries_count")) +" <= " + str(self.params) +" )."
     # set result
-    self.result = b.specs.get("files_count") >= self.params
+    self.result = b.specs.get("entries_count") >= self.params
 
 
 class BackupSpecs:
@@ -256,15 +256,15 @@ import paramiko
 class SshFileBackup(Backup):
   def __init__(self,yml):
     self.location = yml["location"]
-    self.init_sftp_connection()
+    self.init_sftp_connection(yml)
     Backup.__init__(self,yml)
 
-  def init_sftp_connection(self):
+  def init_sftp_connection(self,yml):
     self.ssh = paramiko.SSHClient()
     # FIXME
     self.ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
     self.host,self.remote_path=self.location.split(":")
-    self.ssh.connect(self.host)
+    self.ssh.connect(self.host, username=yml["ssh_user"])
     self.sftp=self.ssh.open_sftp()
 
     
@@ -280,15 +280,15 @@ class SshFileBackup(Backup):
 class SshDirBackup(Backup):
   def __init__(self,yml):
     self.location = yml["location"]
-    self.init_sftp_connection()
+    self.init_sftp_connection(yml)
     Backup.__init__(self,yml)
 
-  def init_sftp_connection(self):
+  def init_sftp_connection(self, yml):
     self.ssh = paramiko.SSHClient()
     # FIXME
     self.ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
     self.host,self.remote_path=self.location.split(":")
-    self.ssh.connect(self.host)
+    self.ssh.connect(self.host, username=yml["ssh_user"])
     self.sftp=self.ssh.open_sftp()
 
     
@@ -302,7 +302,7 @@ class SshDirBackup(Backup):
     stats = self.sftp.lstat(self.remote_path)
     self.specs.set("mtime", stats.st_mtime)
     stdin,stdout,stderr=self.ssh.exec_command("ls "+ self.remote_path + "| wc -l")
-    self.specs.set("files_count", int(stdout.readlines()[0])) 
+    self.specs.set("entries_count", int(stdout.readlines()[0])) 
 
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
