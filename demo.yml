@@ -1,36 +1,42 @@
 backups:
-- desc: My first backup
+- name: My first backup
   kind: file
   location: /tmp/backup_<%= time.strftime('%Y-%m-%d') %>.tgz
-  name: first backup
   tests:
     minsize: 1Kb
-- desc: My secondbackup
+
   kind: file
   location: /tmp/test.tgz
-  name: secondbackup
   tests:
     minsize: 1Kb
     filetype: application/gzip
-- desc: backup file glob
+- name: backup file glob
   location: /tmp/tes*.tgz
-  name: thirdbackup
   validators:
   kind: fileglob
   tests:
     minsize: 1Kb
     filetype: application/gzip
-- desc: s3 backup
+- name: s3 backup
   s3_auth: s3_auth_demo.yml
   location: destockjeans-db-backup/destockjeans-db.production.mainappserver.20140825030015.sql.gz.enc
-  name: s3backup
   kind: s3_file
   tests:
     minsize: 1Kb
-- desc: s3 backup
+- name: s3 backup
   s3_auth: s3_auth_demo.yml
   location: destockjeans-db-backup/destockjeans-db.production.mainappserver.<%= time.strftime('%Y%m%d') %>*.sql.gz.enc
-  name: s3backup
   kind: s3_fileglob
   tests:
     minsize: 1Kb
+- name: ssh file
+  location: MY.IP.ADD.RESS:/home/rb/dashboard_jwt.tar.bz2
+  kind: ssh_file
+  tests:
+    minsize: 3Mb
+- name: ssh dir
+  location: MY.IP.ADD.RESS:/home/rb
+  kind: ssh_dir
+  tests:
+    minsize: 3Mb
+    min_file_count: 5

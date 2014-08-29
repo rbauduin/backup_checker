@@ -7,6 +7,8 @@ tr.invalid {background-color: red;}
 </style>
 </head>
 <body>
+<h1>Backup check results</h1>
+<h2>Summary</h2>
 <table>
   <tr>
     <th>Backup</th>
@@ -14,11 +16,16 @@ tr.invalid {background-color: red;}
   </tr>
 #for $backup in $bc.backups
   <tr class="$backup.status">
-    <td>$backup.location</td>
+    <td>$backup.name</td>
     <td>$backup.status</td>
   </tr>
 #end for
 </table>
+
+<h2>Detailed Logs</h2>
+<pre>
+$bc
+</pre>
 </body>
 </html>
 

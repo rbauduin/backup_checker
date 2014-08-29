@@ -2,3 +2,4 @@ pyaml
 cheetah
 humanfriendly
 boto
+paramiko

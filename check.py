@@ -76,6 +76,23 @@ class FiletypeTest(Test):
     self.result = b.specs.get("mimetype") == self.params
 
 
+class CountTest(Test):
+  def run_test(self,b):
+    # set messages
+    self.success_message = "Number of matches correct ( "+ str(b.specs.get("count")) +" == " + str(self.params) +" )."
+    self.error_message =   "Number of matches INCORRECT ( "+ str(b.specs.get("count")) +" != " + str(self.params) +" )."
+    # set result
+    self.result = b.specs.get("count") == self.params
+
+class MinFileCountTest(Test):
+  def run_test(self,b):
+    # set messages
+    self.success_message = "Number of file correct ( "+ str(b.specs.get("files_count")) +" >= " + str(self.params) +" )."
+    self.error_message =   "Number of file INCORRECT ( "+ str(b.specs.get("files_count")) +" <= " + str(self.params) +" )."
+    # set result
+    self.result = b.specs.get("files_count") >= self.params
+
+
 class BackupSpecs:
   def __init__(self):
     self.specs={}
@@ -147,19 +164,32 @@ import glob
 class FileglobBackup(FileBackup):
   def exists(self):
     found = glob.glob(self.location)
-    l = len(found)
-    if l==0:
-      return False
-    elif l>1:
+    count = len(found)
+    if count<1:
       return False
     else:
-      self.location =  found[0]
+      self.matches =  found
+      self.count = count
       return True
+  def collect_specs(self):
+    self.specs.set("count", self.count)
+    total_size = sum(os.path.getsize(l) for l in self.matches)
+    self.specs.set("size",total_size)
+    self.specs.set("matches",self.matches)
+
+    if self.specs.get("count")==1:
+      output=subprocess.check_output("file --mime-type "+self.location, shell=True)
+      path,mimetype = map(str.rstrip,map(str.lstrip,output.split(":")))
+      self.specs.set("mimetype",mimetype)
+    else:
+      # do not set mimetype if multiple matches
+      self.specs.set("mimetype",None)
 
 import boto
 class S3FileBackup(Backup):
   def __init__(self,yml):
     # needed to break cyclic dependency
+    # move all specific behaciour to collect_specs to avoid this?
     self.location = yml["location"]
     self.init_s3_connection(yml)
     self.init_s3_object()
@@ -194,19 +224,85 @@ class S3FileglobBackup(S3FileBackup):
     objects = bucket.list()
 
     count = 0
-    last = ""
+    matches = []
     for key in objects:
       if fnmatch.fnmatch(key.name,object_name):
         count = count + 1
-        last = key
-    if count==1:
-      self.s3_object=last
-      self.location=bucket_name+"/"+last.name
+        matches.append(key)
+    if count>0:
+      self.count=count
+      self.s3_objects=matches
       return True
     else:
       self.s3_object = None
       return False                   
 
+  def collect_specs(self):
+    self.specs.set("count",self.count)
+
+    total_size = sum(o.size for o in self.s3_objects)
+    self.specs.set("size",total_size)
+
+    if self.specs.get("count")==1:
+      self.specs.set("mimetype",self.s3_objects[0].content_type)
+    else:
+      # do not set mimetype if multiple matches
+      self.specs.set("mimetype",None)
+
+  def exists(self):
+    return self.count>0
+
+import paramiko
+class SshFileBackup(Backup):
+  def __init__(self,yml):
+    self.location = yml["location"]
+    self.init_sftp_connection()
+    Backup.__init__(self,yml)
+
+  def init_sftp_connection(self):
+    self.ssh = paramiko.SSHClient()
+    # FIXME
+    self.ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+    self.host,self.remote_path=self.location.split(":")
+    self.ssh.connect(self.host)
+    self.sftp=self.ssh.open_sftp()
+
+    
+  def exists(self):
+    #FIXME
+    return True
+
+  def collect_specs(self):
+    stats = self.sftp.lstat(self.remote_path)
+    self.specs.set("size",stats.st_size)
+    self.specs.set("mtime", stats.st_mtime)
+
+class SshDirBackup(Backup):
+  def __init__(self,yml):
+    self.location = yml["location"]
+    self.init_sftp_connection()
+    Backup.__init__(self,yml)
+
+  def init_sftp_connection(self):
+    self.ssh = paramiko.SSHClient()
+    # FIXME
+    self.ssh.set_missing_host_key_policy( paramiko.AutoAddPolicy())
+    self.host,self.remote_path=self.location.split(":")
+    self.ssh.connect(self.host)
+    self.sftp=self.ssh.open_sftp()
+
+    
+  def exists(self):
+    #FIXME
+    return True
+
+  def collect_specs(self):
+    stdin,stdout,stderr=self.ssh.exec_command("du -sb "+self.remote_path)
+    self.specs.set("size", int(stdout.readlines()[0].split('\t')[0]) )
+    stats = self.sftp.lstat(self.remote_path)
+    self.specs.set("mtime", stats.st_mtime)
+    stdin,stdout,stderr=self.ssh.exec_command("ls "+ self.remote_path + "| wc -l")
+    self.specs.set("files_count", int(stdout.readlines()[0])) 
 
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
