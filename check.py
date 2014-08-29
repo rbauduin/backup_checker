@@ -5,6 +5,7 @@ import os.path
 import humanfriendly
 import subprocess
 import yaml
+import sys
 
 # The hierarchy of objects is:
 # backup ----< validators ----< tests
@@ -188,19 +189,13 @@ import fnmatch
 class S3FileglobBackup(S3FileBackup):
   def init_s3_object(self):
     bucket_name,object_name=self.location.split('/')
-    print(bucket_name)
-    print(object_name)
     bucket=self.conn.get_bucket(bucket_name)
-    print(bucket)
 
     objects = bucket.list()
 
     count = 0
     last = ""
     for key in objects:
-      print(key.name)
-      print(self.location)
-      print fnmatch.fnmatch(key.name,self.location)
       if fnmatch.fnmatch(key.name,object_name):
         count = count + 1
         last = key
@@ -265,7 +260,7 @@ class BackupChecker:
   def to_html(self):
       return Template(file="report.html", searchList=[{"bc":self}]).__str__()
 
-bc=BackupChecker("demo.yml")
+bc=BackupChecker(sys.argv[1])
 bc.check()
 print(bc)
 print(bc.to_html())
