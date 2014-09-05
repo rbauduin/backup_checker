@@ -330,8 +330,12 @@ class SshDirBackup(Backup):
     return True
 
   def collect_specs(self):
-    stdin,stdout,stderr=self.ssh.exec_command("du -sb "+self.remote_path)
-    self.specs.set("size", int(stdout.readlines()[0].split('\t')[0]) )
+    # lazily compute du
+    def du_computer():
+      stdin,stdout,stderr=self.ssh.exec_command("du -sb "+self.remote_path)
+      return int(stdout.readlines()[0].split('\t')[0])
+    self.specs.set("size", du_computer )
+
     stats = self.sftp.lstat(self.remote_path)
     self.specs.set("mtime", stats.st_mtime)
     stdin,stdout,stderr=self.ssh.exec_command("ls "+ self.remote_path + "| wc -l")
