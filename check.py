@@ -182,7 +182,13 @@ class FileBackup(Backup):
   def collect_specs(self):
     self.specs.set("size",os.path.getsize(self.location))
 
-    output=subprocess.check_output("file --mime-type "+self.location, shell=True)
+   
+    try:
+      output=subprocess.check_output("file --mime-type "+self.location, shell=True)
+    except:
+      # for python 2.6
+      output=subprocess.Popen(["file", "--mime-type", self.location], stdout=subprocess.PIPE).communicate()[0]
+
     path,mimetype = map(str.rstrip,map(str.lstrip,output.split(":")))
     self.specs.set("mimetype",mimetype)
 
