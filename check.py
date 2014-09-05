@@ -75,6 +75,27 @@ class FiletypeTest(Test):
     # set result
     self.result = b.specs.get("mimetype") == self.params
 
+class MaxAgeTest(Test):
+  def run_test(self,b):
+    # set messages
+    elapsed_time_text = str(humanfriendly.Timer(b.specs.get("mtime")).elapsed_time)
+    self.success_message = "File last modification time correct ( "+ elapsed_time_text +" <= " + str(self.params) +" )."
+    self.error_message =   "File last modification time INCORRECT ( "+ elapsed_time_text +" > " + str(self.params) +" )."
+    # set result
+    self.result = humanfriendly.Timer(b.specs.get("mtime")).elapsed_time <=  self.params
+
+class MinAgeTest(Test):
+  def run_test(self,b):
+    # set messages
+    elapsed_time_text = str(humanfriendly.Timer(b.specs.get("mtime")).elapsed_time)
+    self.success_message = "File last modification time correct ( "+ elapsed_time_text +" >= " + str(self.params) +" )."
+    self.error_message =   "File last modification time INCORRECT ( "+ elapsed_time_text +" < " + str(self.params) +" )."
+    # set result
+    self.result = humanfriendly.Timer(b.specs.get("mtime")).elapsed_time >=  self.params
+
+
+
+
 
 class CountTest(Test):
   def run_test(self,b):
