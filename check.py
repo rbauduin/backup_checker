@@ -6,6 +6,7 @@ import humanfriendly
 import subprocess
 import yaml
 import sys
+import time
 
 # The hierarchy of objects is:
 # backup ----< validators ----< tests
@@ -390,8 +391,11 @@ class BackupChecker:
       s+=str(b)
       s+="\n"
     return s
-  def to_html(self):
-      return Template(file="report.html", searchList=[{"bc":self}]).__str__()
+  def to_html(self, filename="results"):
+      html = Template(file="report.tpl", searchList=[{"bc":self}]).__str__()
+      f = open(filename+'_'+ time.strftime('%Y-%m-%d') + '.html', 'w')
+      f.write(html)
+      f.close
 
 bc=BackupChecker(sys.argv[1])
 bc.check()
