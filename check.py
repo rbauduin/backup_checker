@@ -191,6 +191,7 @@ class FileBackup(Backup):
 
     path,mimetype = map(str.rstrip,map(str.lstrip,output.split(":")))
     self.specs.set("mimetype",mimetype)
+    self.specs.set("mtime",os.path.getmtime(self.location))
 
 import glob
 class FileglobBackup(FileBackup):
