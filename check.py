@@ -120,6 +120,11 @@ class BackupSpecs:
   def set(self,k,v):
     self.specs[k]=v
   def get(self,k):
+    item = self.specs[k]
+    # compute and memoize
+    if callable(item):
+      result = item()
+      self.specs[k] = result
     return self.specs[k]
 
 
