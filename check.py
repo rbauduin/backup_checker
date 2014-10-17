@@ -39,10 +39,8 @@ class Test:
   def check(self,b):
     self.run_test(b)
     if self.result:
-      print(self.success_message)
       message=self.success_message
     else:
-      print(self.error_message)
       message=self.error_message
     b.log_message(self.result, message)
     return self.result
@@ -263,8 +261,8 @@ class S3FileglobBackup(S3FileBackup):
       if fnmatch.fnmatch(key.name,object_name):
         count = count + 1
         matches.append(key)
+    self.count=count
     if count>0:
-      self.count=count
       self.s3_objects=matches
       return True
     else:
@@ -345,11 +343,13 @@ class SshDirBackup(Backup):
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
 
+# for notifications
+import smtplib
+from email.mime.text import MIMEText
 class BackupChecker:
   def __init__(self,config_file):
     # Read config and initialise backup instances
     self.config = yaml.load(Template(file=config_file).__str__())
-    print(self.config)
     self.backups= [self.init_backup(b) for b in self.config['backups']]
   def init_backup(self,yml):
     name = yml["kind"].title().replace("_","")+"Backup"
@@ -383,6 +383,24 @@ class BackupChecker:
   def check(self):
     for i,backup in enumerate(self.backups):
       self.check_backup(backup)
+    if all( backup.status=="valid" for backup in self.backups):
+        # success action. FIXME: add possible success actions
+      pass
+    else:
+      # error actions
+      # send mail
+      if self.config["settings"]["notifications"]["mail_on_error"]:
+        self.notify(self.config["settings"]["notifications"]["mail_to"],"Backup error",str(bc) )
+
+  def notify(self,recipients,subject,body):
+    s = smtplib.SMTP(self.config["settings"]["notifications"]["smtp_server"], self.config["settings"]["notifications"]["smtp_port"])
+    #s.set_debuglevel(1)
+    msg = MIMEText(body)
+    sender = self.config["settings"]["notifications"]["sender"]
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = ", ".join(recipients)
+    s.sendmail(sender, recipients, msg.as_string())
 
   def __str__(self):
     s = "BackupChecker results\n"
@@ -400,4 +418,4 @@ class BackupChecker:
 bc=BackupChecker(sys.argv[1])
 bc.check()
 print(bc)
-print(bc.to_html())
+bc.to_html()
