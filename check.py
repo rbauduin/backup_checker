@@ -207,21 +207,28 @@ class FileBackup(Backup):
     self.specs.set("mimetype",mimetype)
     self.specs.set("mtime",os.path.getmtime(self.location))
 
-    try:
-      output=subprocess.check_output("md5sum "+self.location, shell=True)
-    except:
-      # for python 2.6
-      output=subprocess.Popen(["md5sum", self.location], stdout=subprocess.PIPE).communicate()[0]
-    md5,path = map(str.rstrip,map(str.lstrip,output.split()))
-    self.specs.set("md5",md5)
+    # lazy md5 computation
+    def compute_md5():
+      try:
+        output=subprocess.check_output("md5sum "+self.location, shell=True)
+      except:
+        # for python 2.6
+        output=subprocess.Popen(["md5sum", self.location], stdout=subprocess.PIPE).communicate()[0]
+      md5,path = map(str.rstrip,map(str.lstrip,output.split()))
+      return md5
+    self.specs.set("md5",compute_md5)
 
-    try:
-      output=subprocess.check_output("sha1sum "+self.location, shell=True)
-    except:
-      # for python 2.6
-      output=subprocess.Popen(["sha1sum", self.location], stdout=subprocess.PIPE).communicate()[0]
-    sha1,path = map(str.rstrip,map(str.lstrip,output.split()))
-    self.specs.set("sha1",sha1)
+    # lazily compute sha1
+    def compute_sha1():
+      try:
+        output=subprocess.check_output("sha1sum "+self.location, shell=True)
+      except:
+        # for python 2.6
+        output=subprocess.Popen(["sha1sum", self.location], stdout=subprocess.PIPE).communicate()[0]
+      sha1,path = map(str.rstrip,map(str.lstrip,output.split()))
+      return sha1
+
+    self.specs.set("sha1",compute_sha1)
 
 import glob
 class FileglobBackup(FileBackup):
@@ -346,12 +353,17 @@ class SshFileBackup(Backup):
     #  self.specs.set("md5", f.check('md5'))
     # so do it manually:
     
-    stdin,stdout,stderr=self.ssh.exec_command("sha1sum "+self.remote_path)
-    sha1=stdout.readlines()[0].split()[0]
-    stdin,stdout,stderr=self.ssh.exec_command("md5sum "+self.remote_path)
-    md5=stdout.readlines()[0].split()[0]
-    self.specs.set("sha1", sha1)
-    self.specs.set("md5", md5)
+    def compute_sha1():
+      stdin,stdout,stderr=self.ssh.exec_command("sha1sum "+self.remote_path)
+      sha1=stdout.readlines()[0].split()[0]
+      return sha1
+    self.specs.set("sha1", compute_sha1)
+
+    def compute_md5():
+      stdin,stdout,stderr=self.ssh.exec_command("md5sum "+self.remote_path)
+      md5=stdout.readlines()[0].split()[0]
+      return md5
+    self.specs.set("md5", compute_md5)
 
 class SshDirBackup(Backup):
   def __init__(self,yml):
