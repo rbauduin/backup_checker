@@ -1,0 +1,9 @@
+s3_auth_demo.yml
+demo.yml
+prepare_test.sh
+test.yml
+init
+results*
+.*.swp
+session.vim
+todo
