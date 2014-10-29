@@ -339,10 +339,19 @@ class SshFileBackup(Backup):
   def collect_specs(self):
     stats = self.sftp.lstat(self.remote_path)
     self.specs.set("size",stats.st_size)
-    self.specs.set("mtime", stats.st_mtime)
-    with sftp.open(self.remote_path, 'r') as f:
-      self.specs.set("sha1", f.check('sha1'))
-      self.specs.set("md5", f.check('md5'))
+    self.specs.set("mtime", stats.st_mtime) 
+    # Currently not supported by openssh (checkf-file extension)
+    #with self.sftp.open(self.remote_path, 'r') as f:
+    #  self.specs.set("sha1", f.check('sha1'))
+    #  self.specs.set("md5", f.check('md5'))
+    # so do it manually:
+    
+    stdin,stdout,stderr=self.ssh.exec_command("sha1sum "+self.remote_path)
+    sha1=stdout.readlines()[0].split()[0]
+    stdin,stdout,stderr=self.ssh.exec_command("md5sum "+self.remote_path)
+    md5=stdout.readlines()[0].split()[0]
+    self.specs.set("sha1", sha1)
+    self.specs.set("md5", md5)
 
 class SshDirBackup(Backup):
   def __init__(self,yml):
