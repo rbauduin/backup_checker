@@ -7,6 +7,7 @@ import subprocess
 import yaml
 import sys
 import time
+import hashlib
 
 # The hierarchy of objects is:
 # backup ----< validators ----< tests
@@ -32,6 +33,18 @@ class Test:
     self.success_message = "Test did pass. "+self.__class__.__name__
     self.error_message =   "Test did NOT pass. "+self.__class__.__name__
     self.prepare()
+
+  def run_test(self,b):
+    # generic value test based on the class name
+    # this will compare the value of the attribute having the name 
+    # of the class (stripped of the Test suffix)
+    # to be overriden in child class for more specific behaviour
+    name=self.__class__.__name__.replace("Test","").lower()
+    self.success_message = "File "+name+" correct( "+ str(self.params) +" )."
+    self.error_message =   "File "+name+" INCORRECT ( "+ b.specs.get(name) +" != " + str(self.params) +" )."
+    # set result
+    self.result = b.specs.get(name) == self.params
+
   def prepare(self):
     # Used in derived classes to setup the instance more
   # precisely
@@ -93,8 +106,11 @@ class MinAgeTest(Test):
     self.result = humanfriendly.Timer(b.specs.get("mtime")).elapsed_time >=  self.params
 
 
+class Sha1Test(Test):
+  pass
 
-
+class Md5Test(Test):
+  pass
 
 class CountTest(Test):
   def run_test(self,b):
@@ -180,7 +196,6 @@ class Backup:
 class FileBackup(Backup):
   def collect_specs(self):
     self.specs.set("size",os.path.getsize(self.location))
-
    
     try:
       output=subprocess.check_output("file --mime-type "+self.location, shell=True)
@@ -191,6 +206,22 @@ class FileBackup(Backup):
     path,mimetype = map(str.rstrip,map(str.lstrip,output.split(":")))
     self.specs.set("mimetype",mimetype)
     self.specs.set("mtime",os.path.getmtime(self.location))
+
+    try:
+      output=subprocess.check_output("md5sum "+self.location, shell=True)
+    except:
+      # for python 2.6
+      output=subprocess.Popen(["md5sum", self.location], stdout=subprocess.PIPE).communicate()[0]
+    md5,path = map(str.rstrip,map(str.lstrip,output.split()))
+    self.specs.set("md5",md5)
+
+    try:
+      output=subprocess.check_output("sha1sum "+self.location, shell=True)
+    except:
+      # for python 2.6
+      output=subprocess.Popen(["sha1sum", self.location], stdout=subprocess.PIPE).communicate()[0]
+    sha1,path = map(str.rstrip,map(str.lstrip,output.split()))
+    self.specs.set("sha1",sha1)
 
 import glob
 class FileglobBackup(FileBackup):
@@ -240,6 +271,7 @@ class S3FileBackup(Backup):
   def collect_specs(self):
     self.specs.set("size",self.s3_object.size)
     self.specs.set("mimetype",self.s3_object.content_type)
+    self.specs.set("md5",self.s3_object.md5)
     #k.size
     #k.last_modified
     #import time
@@ -308,6 +340,9 @@ class SshFileBackup(Backup):
     stats = self.sftp.lstat(self.remote_path)
     self.specs.set("size",stats.st_size)
     self.specs.set("mtime", stats.st_mtime)
+    with sftp.open(self.remote_path, 'r') as f:
+      self.specs.set("sha1", f.check('sha1'))
+      self.specs.set("md5", f.check('md5'))
 
 class SshDirBackup(Backup):
   def __init__(self,yml):
