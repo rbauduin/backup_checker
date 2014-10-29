@@ -1,0 +1,8 @@
+rb@ns399869:~/backup_checker$ ls
+check.py  report.html  requirements.txt  s3_auth_demo.yml  test.yml
+rb@ns399869:~/backup_checker$ virtualenv init
+New python executable in init/bin/python
+Installing distribute..................................................................................................................................................................................done.
+rb@ns399869:~/backup_checker$ . ./init/bin/activate
+(init)rb@ns399869:~/backup_checker$ pip install -r requirements.txt 
+
