@@ -327,8 +327,14 @@ import paramiko
 class SshFileBackup(Backup):
   def __init__(self,yml):
     self.location = yml["location"]
+    # Initialise property to be set later on
+    self.stats = None
     self.init_sftp_connection(yml)
     Backup.__init__(self,yml)
+
+  def __del__(self):
+    self.sftp.close()
+    self.ssh.close()
 
   def init_sftp_connection(self,yml):
     self.ssh = paramiko.SSHClient()
@@ -338,13 +344,24 @@ class SshFileBackup(Backup):
     self.ssh.connect(self.host, username=yml["ssh_user"])
     self.sftp=self.ssh.open_sftp()
 
-    
+  def stat_path(self):
+  # get stat of path. Does not take anny argument, but uses the instance's member variable
+    if self.stats == None:
+      self.stats=self.sftp.stat(self.remote_path)
+    return self.stats
+
   def exists(self):
-    #FIXME
+    try: 
+      stats = self.stat_path()
+    except IOError, e:
+      return False
+      # if we want to be more precise in the future:
+      #if e.errno == errno.ENOENT:
+      #  return False
     return True
 
   def collect_specs(self):
-    stats = self.sftp.lstat(self.remote_path)
+    stats = self.stat_path()
     self.specs.set("size",stats.st_size)
     self.specs.set("mtime", stats.st_mtime) 
     # Currently not supported by openssh (checkf-file extension)
@@ -353,6 +370,7 @@ class SshFileBackup(Backup):
     #  self.specs.set("md5", f.check('md5'))
     # so do it manually:
     
+    # define functions for heavy computation so it is done only if needed
     def compute_sha1():
       stdin,stdout,stderr=self.ssh.exec_command("sha1sum "+self.remote_path)
       sha1=stdout.readlines()[0].split()[0]
@@ -408,6 +426,7 @@ class BackupChecker:
     self.config = yaml.load(Template(file=config_file).__str__())
     self.backups= [self.init_backup(b) for b in self.config['backups']]
   def init_backup(self,yml):
+    # Find class and instanciate it with its yml config
     name = yml["kind"].title().replace("_","")+"Backup"
     klass = globals()[name]
     return klass(yml)
