@@ -165,7 +165,9 @@ class Backup:
       self.tests = []
     self.messages = []
     # collect specs only if backup exists
-    if self.exists():
+    if not self.to_be_run_today():
+      self.set_skipped()
+    elif self.exists():
       self.status = 'unchecked'
       self.collect_specs()
     else:
@@ -188,6 +190,8 @@ class Backup:
     self.status!="unchecked"
   def is_invalid(self):
     return self.status=='invalid'
+  def is_skipped(self):
+    return self.status=='skipped'
   def log_message(self,success, message):
     self.messages.append( (success, message) )
   # get value for key in yaml config
@@ -460,10 +464,8 @@ class BackupChecker:
 
   def check_backup(self,b):
     # Check one backup
-    if not b.to_be_run_today():
-      b.set_skipped()
+    if b.is_skipped():
       return
-
     # INIT
     # i is index, l length of validators list
     i=0
