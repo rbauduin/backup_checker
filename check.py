@@ -490,7 +490,7 @@ class BackupChecker:
   def check(self):
     for i,backup in enumerate(self.backups):
       self.check_backup(backup)
-    if all( backup.status=="valid" for backup in self.backups):
+    if all( (backup.status=="valid" or backup.status=="skipped") for backup in self.backups):
         # success action. FIXME: add possible success actions
       pass
     else:
