@@ -431,6 +431,19 @@ class SshDirBackup(Backup):
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
 
+
+
+class GitBackup(Backup):
+  def exists(self):
+    return os.path.isdir(self.get("location"))
+  def collect_specs(self):
+    try:
+      output=subprocess.check_output("git log -n 1 --format=format:%ct", cwd=self.get("location"))
+    except:
+      # for python 2.6
+      output=subprocess.Popen(["git", "log", "-n","1", "--format=format:%ct"], cwd=self.get("location"), stdout=subprocess.PIPE).communicate()[0]
+    self.specs.set("mtime",int(output))
+
 # for notifications
 import smtplib
 from email.mime.text import MIMEText
