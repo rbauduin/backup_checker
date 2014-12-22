@@ -143,10 +143,12 @@ class BackupSpecs:
     return self.specs[k]
 
 
+
 ################################################################################
 # Backups hold specs about the storage of the backup to be validated,
 # and other data like name and description.
 # It initialises the validators defined for it in the yaml file
+from datetime import date
 class Backup:
   def __init__(self, yml):
     # path is value configure in yaml file
@@ -155,6 +157,7 @@ class Backup:
     self.path = self.location
     self.name     = yml["name"]
     self.kind     = yml["kind"]
+    self.yml      = yml
     self.specs    = BackupSpecs()
     if yml["tests"]: # and  yml["validators"]
       self.tests = [self.initialize_test(k,v) for k,v in yml["tests"].iteritems()]
@@ -179,12 +182,23 @@ class Backup:
     self.status='valid'
   def set_invalid(self):
     self.status='invalid'
+  def set_skipped(self):
+    self.status='skipped'
   def done(self):
     self.status!="unchecked"
   def is_invalid(self):
     return self.status=='invalid'
   def log_message(self,success, message):
     self.messages.append( (success, message) )
+  # get value for key in yaml config
+  def get(self,key):
+    return self.yml[key]
+  # returns true of it has to be run today
+  def to_be_run_today(self):
+    if "days_of_week" in self.yml:
+      return date.today().isoweekday() in self.get("days_of_week") 
+    else:
+      return True
 
 
   def __str__(self):
@@ -433,6 +447,9 @@ class BackupChecker:
 
   def check_backup(self,b):
     # Check one backup
+    if not b.to_be_run_today():
+      b.set_skipped()
+      return
 
     # INIT
     # i is index, l length of validators list
