@@ -27,35 +27,36 @@ import hashlib
 # The test are done in the check method, which takes
 # the backup to test as argument.
 class Test:
-  def __init__(self, params={}):
+  def __init__(self, backup, params={}):
     self.params = params
+    self.backup=backup
     # set default messages
     self.success_message = "Test did pass. "+self.__class__.__name__
     self.error_message =   "Test did NOT pass. "+self.__class__.__name__
     self.prepare()
 
-  def run_test(self,b):
+  def run_test(self):
     # generic value test based on the class name
     # this will compare the value of the attribute having the name 
     # of the class (stripped of the Test suffix)
     # to be overriden in child class for more specific behaviour
     name=self.__class__.__name__.replace("Test","").lower()
     self.success_message = "File "+name+" correct( "+ str(self.params) +" )."
-    self.error_message =   "File "+name+" INCORRECT ( "+ b.specs.get(name) +" != " + str(self.params) +" )."
+    self.error_message =   "File "+name+" INCORRECT ( "+ self.backup.specs.get(name) +" != " + str(self.params) +" )."
     # set result
-    self.result = b.specs.get(name) == self.params
+    self.result = self.backup.specs.get(name) == self.params
 
   def prepare(self):
     # Used in derived classes to setup the instance more
   # precisely
     pass
-  def check(self,b):
-    self.run_test(b)
+  def check(self):
+    self.run_test()
     if self.result:
       message=self.success_message
     else:
       message=self.error_message
-    b.log_message(self.result, message)
+    self.backup.log_message(self.result, message)
     return self.result
 
 # Check size of backup is above the minimum value as
@@ -71,39 +72,39 @@ class MinsizeTest(Test):
       self.minsize=self.params
 
 
-  def run_test(self,b):
+  def run_test(self):
     # setup messages
-    self.success_message = "Minimum size respected ( "+ str(b.specs.get("size")) +" !< " + str(self.minsize) +" )."
-    self.error_message = "Minimum size not respected ( "+ str(b.specs.get("size")) +" < " + str(self.minsize) +" )."
+    self.success_message = "Minimum size respected ( "+ str(self.backup.specs.get("size")) +" !< " + str(self.minsize) +" )."
+    self.error_message = "Minimum size not respected ( "+ str(self.backup.specs.get("size")) +" < " + str(self.minsize) +" )."
 
     # perform test
-    self.result = b.specs.get("size")>=self.minsize
+    self.result = self.backup.specs.get("size")>=self.minsize
 
 class FiletypeTest(Test):
-  def run_test(self,b):
+  def run_test(self):
     # set messages
-    self.success_message = "File type correct ( "+ b.specs.get("mimetype") +" == " + self.params +" )."
-    self.error_message =   "File type INCORRECT ( "+ b.specs.get("mimetype") +" != " + self.params +" )."
+    self.success_message = "File type correct ( "+ self.backup.specs.get("mimetype") +" == " + self.params +" )."
+    self.error_message =   "File type INCORRECT ( "+ self.backup.specs.get("mimetype") +" != " + self.params +" )."
     # set result
-    self.result = b.specs.get("mimetype") == self.params
+    self.result = self.backup.specs.get("mimetype") == self.params
 
 class MaxAgeTest(Test):
-  def run_test(self,b):
+  def run_test(self):
     # set messages
-    elapsed_time_text = str(humanfriendly.Timer(b.specs.get("mtime")).elapsed_time)
+    elapsed_time_text = str(humanfriendly.Timer(self.backup.specs.get("mtime")).elapsed_time)
     self.success_message = "File last modification time correct ( "+ elapsed_time_text +" <= " + str(self.params) +" )."
     self.error_message =   "File last modification time INCORRECT ( "+ elapsed_time_text +" > " + str(self.params) +" )."
     # set result
-    self.result = humanfriendly.Timer(b.specs.get("mtime")).elapsed_time <=  self.params
+    self.result = humanfriendly.Timer(self.backup.specs.get("mtime")).elapsed_time <=  self.params
 
 class MinAgeTest(Test):
-  def run_test(self,b):
+  def run_test(self):
     # set messages
-    elapsed_time_text = str(humanfriendly.Timer(b.specs.get("mtime")).elapsed_time)
+    elapsed_time_text = str(humanfriendly.Timer(self.backup.specs.get("mtime")).elapsed_time)
     self.success_message = "File last modification time correct ( "+ elapsed_time_text +" >= " + str(self.params) +" )."
     self.error_message =   "File last modification time INCORRECT ( "+ elapsed_time_text +" < " + str(self.params) +" )."
     # set result
-    self.result = humanfriendly.Timer(b.specs.get("mtime")).elapsed_time >=  self.params
+    self.result = humanfriendly.Timer(self.backup.specs.get("mtime")).elapsed_time >=  self.params
 
 
 class Sha1Test(Test):
@@ -113,20 +114,20 @@ class Md5Test(Test):
   pass
 
 class CountTest(Test):
-  def run_test(self,b):
+  def run_test(self):
     # set messages
-    self.success_message = "Number of matches correct ( "+ str(b.specs.get("count")) +" == " + str(self.params) +" )."
-    self.error_message =   "Number of matches INCORRECT ( "+ str(b.specs.get("count")) +" != " + str(self.params) +" )."
+    self.success_message = "Number of matches correct ( "+ str(self.backup.specs.get("count")) +" == " + str(self.params) +" )."
+    self.error_message =   "Number of matches INCORRECT ( "+ str(self.backup.specs.get("count")) +" != " + str(self.params) +" )."
     # set result
-    self.result = b.specs.get("count") == self.params
+    self.result = self.backup.specs.get("count") == self.params
 
 class MinEntriesCountTest(Test):
-  def run_test(self,b):
+  def run_test(self):
     # set messages
-    self.success_message = "Number of file correct ( "+ str(b.specs.get("entries_count")) +" >= " + str(self.params) +" )."
-    self.error_message =   "Number of file INCORRECT ( "+ str(b.specs.get("entries_count")) +" <= " + str(self.params) +" )."
+    self.success_message = "Number of file correct ( "+ str(self.backup.specs.get("entries_count")) +" >= " + str(self.params) +" )."
+    self.error_message =   "Number of file INCORRECT ( "+ str(self.backup.specs.get("entries_count")) +" <= " + str(self.params) +" )."
     # set result
-    self.result = b.specs.get("entries_count") >= self.params
+    self.result = self.backup.specs.get("entries_count") >= self.params
 
 
 class BackupSpecs:
@@ -179,7 +180,7 @@ class Backup:
   def initialize_test(self,k,v):
     name = k.title().replace("_","")+"Test"
     klass = globals()[name]
-    return klass(v)
+    return klass(self,v)
   def set_valid(self):
     self.status='valid'
   def set_invalid(self):
@@ -478,7 +479,7 @@ class BackupChecker:
       t=b.tests[i]
       # if the check fails; we set the backup as invalid
       # and loop will stop
-      if not t.check(b):
+      if not t.check():
         b.set_invalid()
       i=i+1
     # if we went through the whole list without invalidating it, the 
