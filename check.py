@@ -118,7 +118,6 @@ class DirectoryNewestEntryMaxAgeTest(Test):
         continue
       if "with_files" in self.params.keys() and not self.params["with_files"] and os.path.isfile(e):
         continue
-      print(e)
       try:
         entry_path="%s/%s"%(path.rstrip("/"),e)
         entry_time=os.path.getmtime(entry_path)
@@ -263,6 +262,9 @@ class Backup:
     else:
       return True
 
+  # called after test has run, added to close ssh and aws connections
+  def cleanup(self):
+    pass
 
   def __str__(self):
     s= "Backup " + self.name + "( " + self.location + ") : " + self.status +"\n"
@@ -362,6 +364,8 @@ class S3FileBackup(Backup):
     #time.strptime(k.last_modified, '%a, %d %b %Y %H:%M:%S %Z')
     #k.name
     #k.content_type
+  def cleanup(self):
+    self.conn.close()
 
 import fnmatch
 class S3FileglobBackup(S3FileBackup):
@@ -409,7 +413,7 @@ class SshFileBackup(Backup):
     self.init_sftp_connection(yml)
     Backup.__init__(self,yml)
 
-  def __del__(self):
+  def cleanup(self):
     self.sftp.close()
     self.ssh.close()
 
@@ -490,6 +494,9 @@ class SshDirBackup(Backup):
     self.specs.set("mtime", stats.st_mtime)
     stdin,stdout,stderr=self.ssh.exec_command("ls "+ self.remote_path + "| wc -l")
     self.specs.set("entries_count", int(stdout.readlines()[0])) 
+  def cleanup(self):
+    self.sftp.close()
+    self.ssh.close()
 
 # Maybe (?) add handle to the file in the backup instance?
 # that would be handle to local file or to the s3 key of the backup file
@@ -583,6 +590,10 @@ class BackupChecker:
     msg['To'] = ", ".join(recipients)
     s.sendmail(sender, recipients, msg.as_string())
 
+  def cleanup(self):
+    for backup in self.backups:
+      backup.cleanup()
+
   def __str__(self):
     s = "BackupChecker results\n"
     s+= "---------------------\n"
@@ -598,5 +609,6 @@ class BackupChecker:
 
 bc=BackupChecker(sys.argv[1])
 bc.check()
+bc.cleanup()
 print(bc)
 bc.to_html()
