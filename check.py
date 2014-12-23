@@ -58,6 +58,13 @@ class Test:
       message=self.error_message
     self.backup.log_message(self.result, message)
     return self.result
+  # add data collected in specs of owning backup instance
+  # automatically called by owning backup
+  def add_specs(self):
+  # helper method to add one spec to the owning backup
+    pass
+  def add_spec(self, key, value):
+    self.backup.specs.set(key,value)
 
 # Check size of backup is above the minimum value as
 # specified in the yaml.
@@ -96,6 +103,54 @@ class MaxAgeTest(Test):
     self.error_message =   "File last modification time INCORRECT ( "+ elapsed_time_text +" > " + str(self.params) +" )."
     # set result
     self.result = humanfriendly.Timer(self.backup.specs.get("mtime")).elapsed_time <=  self.params
+
+class DirectoryNewestEntryMaxAgeTest(Test):
+  # looks recursively (up to depth levels) for the most recent file
+  def newest_in(self,path, depth=0):
+    if "with_hidden" in self.params.keys() and not self.params["with_hidden"] and "with_dirs" in self.params.keys() and not self.params["with_dirs"] and "with_files" in self.params.keys() and not self.params["with_files"]:
+      raise Exception("Configuration Error, all entries disabled in configuration of %s"%self.backup.name)
+    newest_path=None
+    newest_time=None
+    for e in os.listdir(path):
+      if "with_hidden" in self.params.keys() and not self.params["with_hidden"] and fnmatch.fnmatch(e,".*"):
+        continue
+      if "with_dirs" in self.params.keys() and not self.params["with_dirs"] and os.path.isdir(e):
+        continue
+      if "with_files" in self.params.keys() and not self.params["with_files"] and os.path.isfile(e):
+        continue
+      print(e)
+      try:
+        entry_path="%s/%s"%(path.rstrip("/"),e)
+        entry_time=os.path.getmtime(entry_path)
+        if newest_time==None or entry_time>newest_time:
+          newest_time=entry_time
+          newest_path=entry_path
+        if os.path.isdir(e) and depth>0:
+          in_dir_path, in_dir_time = self.newest_in(e)
+          if in_dir_time>newest_time:
+            newest_time=in_dir_time
+            newest_path=in_dir_path
+      except:
+        pass
+    return (newest_path, newest_time)
+
+  def add_specs(self):
+    # define function that will collect the latest entry's mtime
+    def f():
+      if "depth" in self.params.keys():
+        depth = self.params["depth"]
+      else:
+        depth=0
+      self.newest_entry, newest_time = self.newest_in(self.backup.get("location"), depth)
+      return os.path.getmtime(self.newest_entry)
+    self.add_spec("newest_entry_mtime", f)
+
+  def run_test(self):
+    elapsed_time_text = str(humanfriendly.Timer(self.backup.specs.get("newest_entry_mtime")).elapsed_time)
+    self.success_message = "Newest entry ("+self.newest_entry+") last modification time correct ( "+ elapsed_time_text +" <= " + str(self.params["max_age"]) +" )."
+    self.error_message =   "Newest entry ("+self.newest_entry+") last modification time INCORRECT ( "+ elapsed_time_text +" > " + str(self.params["max_age"]) +" )."
+    # set result
+    self.result = humanfriendly.Timer(self.backup.specs.get("newest_entry_mtime")).elapsed_time <=  self.params
 
 class MinAgeTest(Test):
   def run_test(self):
@@ -177,10 +232,13 @@ class Backup:
     return os.path.isfile(self.location)
   def collect_specs(self):
     pass
+  # locate, instanciate test class, and call its add_specs method
   def initialize_test(self,k,v):
     name = k.title().replace("_","")+"Test"
     klass = globals()[name]
-    return klass(self,v)
+    test = klass(self,v)
+    test.add_specs()
+    return test
   def set_valid(self):
     self.status='valid'
   def set_invalid(self):
@@ -448,6 +506,21 @@ class GitBackup(Backup):
       # for python 2.6
       output=subprocess.Popen(["git", "log", "-n","1", "--format=format:%ct"], cwd=self.get("location"), stdout=subprocess.PIPE).communicate()[0]
     self.specs.set("mtime",int(output))
+
+class DirectoryBackup(Backup):
+  def exists(self):
+    return os.path.isdir(self.get("location"))
+  def collect_specs(self):
+    def du_computer():
+      try:
+        output=subprocess.check_output("du -sb", cwd=self.get("location"))
+      except:
+        # for python 2.6
+        output=subprocess.Popen(["du", "-sb"], cwd=self.get("location"), stdout=subprocess.PIPE).communicate()[0]
+      return int(output)
+    self.specs.set("size",du_computer)
+    self.specs.set("mtime",os.path.getmtime(self.get("location")))  
+      
 
 # for notifications
 import smtplib
